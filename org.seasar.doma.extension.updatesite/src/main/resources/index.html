@@ -11,34 +11,63 @@
     a { color: light-dark(#1757a6, #91bfff); }
     code { overflow-wrap: anywhere; }
     .url { padding: 1rem; border: 1px solid #888; border-radius: .5rem; }
+    section { margin-top: 2.5rem; scroll-margin-top: 1.5rem; }
+    section + section { border-top: 1px solid #888; padding-top: 1.5rem; }
     footer { margin-top: 3rem; font-size: .9rem; }
   </style>
 </head>
 <body>
   <main>
     <h1>Doma Tools</h1>
-    <p>Eclipse用プラグインの更新サイトです。このフォークでは、DAOメソッドの呼び出し元から
-      <code>Doma &gt; Jump to SQL File</code> でSQLファイルを開けます。</p>
-    <p class="url"><strong>更新サイトURL</strong><br>
+    <nav aria-label="言語 / Language">
+      <a href="#ja" lang="ja">日本語</a> · <a href="#en" lang="en">English</a>
+    </nav>
+    <p class="url"><strong>更新サイトURL / <span lang="en">Update site URL</span></strong><br>
       <a href="https://vipt.github.io/doma-tools/"><code>https://vipt.github.io/doma-tools/</code></a></p>
-    <ol>
-      <li>Eclipseで <strong>ヘルプ → 新規ソフトウェアのインストール…</strong>
-        (<span lang="en">Help → Install New Software…</span>) を開きます。</li>
-      <li><strong>追加…</strong> (<span lang="en">Add…</span>) を選び、名前を
-        <code>Doma Tools</code>、ロケーションを上記の更新サイトURLにします。</li>
-      <li><strong>Doma → Doma Tools</strong> を選び、内容とライセンスを確認してインストールします。</li>
-      <li>Eclipseを再起動します。</li>
-    </ol>
-    <p>Eclipse 2023-12 / Java 17の環境を対象にビルド・テストしています。
-      既存のDoma Toolsと同じプラグインIDを使用するため、既存のインストールを更新します。</p>
-    <p>以降の更新は <strong>ヘルプ → 更新の確認</strong>
-      (<span lang="en">Help → Check for Updates</span>) から行えます。
-      署名や提供元の確認が表示された場合は、表示された内容を確認してください。</p>
-    <p><a href="https://github.com/vipt/doma-tools">ソースコード・使い方・不具合の報告</a></p>
+    <section id="ja" lang="ja" aria-labelledby="heading-ja">
+      <h2 id="heading-ja">日本語</h2>
+      <p>Eclipse用プラグインの更新サイトです。このフォークでは、DAOメソッドの呼び出し元から
+        <code>Doma &gt; Jump to SQL File</code> でSQLファイルを開けます。</p>
+      <ol>
+        <li>Eclipseで <strong>ヘルプ → 新規ソフトウェアのインストール…</strong>
+          (<span lang="en">Help → Install New Software…</span>) を開きます。</li>
+        <li><strong>追加…</strong> (<span lang="en">Add…</span>) を選び、名前を
+          <code>Doma Tools</code>、ロケーションを上記の更新サイトURLにします。</li>
+        <li><strong>Doma → Doma Tools</strong> を選び、内容とライセンスを確認してインストールします。</li>
+        <li>Eclipseを再起動します。</li>
+      </ol>
+      <p>Eclipse 2023-12 / Java 17の環境を対象にビルド・テストしています。
+        既存のDoma Toolsと同じプラグインIDを使用するため、既存のインストールを更新します。</p>
+      <p>以降の更新は <strong>ヘルプ → 更新の確認</strong>
+        (<span lang="en">Help → Check for Updates</span>) から行えます。
+        署名や提供元の確認が表示された場合は、表示された内容を確認してください。</p>
+      <p><a href="https://github.com/vipt/doma-tools">ソースコード・使い方・不具合の報告</a></p>
+    </section>
+    <section id="en" lang="en" aria-labelledby="heading-en">
+      <h2 id="heading-en">English</h2>
+      <p>This is the Eclipse update site for Doma Tools. This fork lets you open SQL files
+        from DAO method calls using <code>Doma &gt; Jump to SQL File</code>.</p>
+      <ol>
+        <li>In Eclipse, open <strong>Help → Install New Software…</strong>.</li>
+        <li>Click <strong>Add…</strong>. Enter <code>Doma Tools</code> as the name
+          and the update site URL above as the location.</li>
+        <li>Select <strong>Doma → Doma Tools</strong>, review the installation details
+          and license, then complete the installation.</li>
+        <li>Restart Eclipse.</li>
+      </ol>
+      <p>The plug-in is built and tested against Eclipse 2023-12 / Java 17.
+        It uses the same plug-in ID as the original Doma Tools, so installing this fork
+        updates an existing Doma Tools installation.</p>
+      <p>For future updates, use <strong>Help → Check for Updates</strong>.
+        If Eclipse displays a signature or publisher trust prompt, review the details shown.</p>
+      <p><a href="https://github.com/vipt/doma-tools">Source code, usage instructions, and issue reporting</a></p>
+    </section>
   </main>
   <footer>
     <p><a href="https://github.com/domaframework/doma-tools">domaframework/doma-tools</a> のフォークです。
       Apache License 2.0で配布しています。</p>
+    <p lang="en">This is a fork of <a href="https://github.com/domaframework/doma-tools">domaframework/doma-tools</a>,
+      distributed under the Apache License 2.0.</p>
   </footer>
 </body>
 </html>
