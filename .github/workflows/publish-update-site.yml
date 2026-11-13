@@ -29,8 +29,20 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: maven
+      - name: Set up Maven 3.8.6 for Tycho 3
+        run: |
+          curl --fail --silent --show-error --location --retry 3 \
+            https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.8.6/apache-maven-3.8.6-bin.tar.gz \
+            --output "$RUNNER_TEMP/apache-maven.tar.gz"
+          printf '%s  %s\n' \
+            'f790857f3b1f90ae8d16281f902c689e4f136ebe584aba45e4b1fa66c80cba826d3e0e52fdd04ed44b4c66f6d3fe3584a057c26dfcac544a60b301e6d0f91c26' \
+            "$RUNNER_TEMP/apache-maven.tar.gz" | sha512sum --check
+          tar -xzf "$RUNNER_TEMP/apache-maven.tar.gz" -C "$RUNNER_TEMP"
+          printf '%s\n' "$RUNNER_TEMP/apache-maven-3.8.6/bin" >> "$GITHUB_PATH"
       - name: Build plug-in and p2 repository
-        run: mvn --batch-mode --no-transfer-progress verify
+        run: |
+          mvn --version
+          mvn --batch-mode --no-transfer-progress verify
       - name: Check generated update site
         run: |
           site_dir=org.seasar.doma.extension.updatesite/target/repository

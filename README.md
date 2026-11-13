@@ -68,7 +68,7 @@ How to use
 Build and install this fork
 -------
 
-Use JDK 17 and Maven 3.8.6 or later:
+Use JDK 17 and Maven 3.8.6 (the version verified with this Tycho 3 build):
 
 ```sh
 mvn --batch-mode --no-transfer-progress verify
@@ -96,6 +96,9 @@ The **Build and publish Eclipse update site** GitHub Actions workflow runs the
 build and tests for pull requests and pushes to `master`. After a successful
 build on `master`, it publishes only the generated p2 repository to GitHub Pages.
 The workflow can also be started manually from the Actions tab on `master`.
+CI pins Maven to 3.8.6 because the legacy Tycho 3.0.5 build fails to initialize
+with the runner's Maven 3.10.0. The Maven download is verified with Apache's
+published SHA-512 checksum.
 
 The repository's `Settings > Pages > Build and deployment > Source` must be set
 to **GitHub Actions**. The published URL for this repository is
