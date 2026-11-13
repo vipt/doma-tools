@@ -11,10 +11,22 @@ Doma Tools does the following:
 1. cross navigation between Java and SQL files.
 2. triggering the annotation processing when saving SQL files.
 
-Marketplace
+Install this fork
 --------
 
-https://marketplace.eclipse.org/content/doma-tools
+Update site: **https://vipt.github.io/doma-tools/**
+
+1. In Eclipse, open `Help > Install New Software... > Add...`.
+2. Enter `Doma Tools` as the name and the update-site URL above as the location.
+3. Select **Doma > Doma Tools**, review the installation and license, then install
+   and restart Eclipse.
+
+Use `Help > Check for Updates` for subsequent updates. This fork uses the same
+bundle and feature IDs as the original Doma Tools and updates that installation.
+
+The [Marketplace listing](https://marketplace.eclipse.org/content/doma-tools)
+is for the upstream project. Use the update-site URL above to install this fork,
+including its DAO-call navigation enhancement.
 
 Settings
 --------
@@ -72,6 +84,28 @@ Install **Doma Tools** and restart Eclipse. This fork uses the original bundle
 and feature IDs, so it updates the existing Doma Tools installation. Its
 version follows the upstream source's `2.0.0` version and has a build qualifier.
 An additional Doma Result Generator plug-in is not required for this command.
+
+The generated directory `org.seasar.doma.extension.updatesite/target/repository/`
+can also be served directly by a static web host. It includes p2 metadata, the
+feature and plug-in JARs, and an installation guide at `index.html`.
+
+Publishing the update site
+-------
+
+The **Build and publish Eclipse update site** GitHub Actions workflow runs the
+build and tests for pull requests and pushes to `master`. After a successful
+build on `master`, it publishes only the generated p2 repository to GitHub Pages.
+The workflow can also be started manually from the Actions tab on `master`.
+
+The repository's `Settings > Pages > Build and deployment > Source` must be set
+to **GitHub Actions**. The published URL for this repository is
+`https://vipt.github.io/doma-tools/`. If you fork the repository again, update the
+URLs in this README and in
+`org.seasar.doma.extension.updatesite/src/main/resources/index.html` for your own
+GitHub account and repository.
+
+Validation
+-------
 
 Tests cover calls, caret and range selections, declarations and their fallback,
 method references, unsaved working copies, referenced projects, scripts,
