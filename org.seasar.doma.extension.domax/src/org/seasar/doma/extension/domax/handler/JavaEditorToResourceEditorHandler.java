@@ -1,5 +1,6 @@
 /*
  * Copyright 2004-2010 the Seasar Foundation and the Others.
+ * Modified 2026: resolve DAO methods at Java call sites.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +20,7 @@ import org.eclipse.core.commands.ExecutionEvent;
 import org.eclipse.core.commands.ExecutionException;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IJavaElement;
+import org.eclipse.jdt.core.IMethod;
 import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.ui.JavaUI;
 import org.eclipse.jface.text.ITextSelection;
@@ -67,16 +69,37 @@ public class JavaEditorToResourceEditorHandler extends
             return null;
         }
         ITextSelection textSelection = (ITextSelection) selection;
-        IJavaElement javaElement = JavaUI.getEditorInputJavaElement(editor
-                .getEditorInput());
-        if (javaElement == null) {
-            return null;
+        ICompilationUnit compilationUnit = JavaUI.getWorkingCopyManager()
+                .getWorkingCopy(editor.getEditorInput());
+        if (compilationUnit == null) {
+            IJavaElement javaElement = JavaUI.getEditorInputJavaElement(editor
+                    .getEditorInput());
+            if (javaElement == null) {
+                return null;
+            }
+            compilationUnit = (ICompilationUnit) javaElement
+                    .getAdapter(ICompilationUnit.class);
         }
-        ICompilationUnit compilationUnit = (ICompilationUnit) javaElement
-                .getAdapter(ICompilationUnit.class);
         if (compilationUnit == null) {
             return null;
         }
+        return getSelectedJavaElement(compilationUnit, textSelection);
+    }
+
+    protected IJavaElement getSelectedJavaElement(
+            ICompilationUnit compilationUnit, ITextSelection textSelection) {
+        try {
+            IJavaElement[] elements = compilationUnit.codeSelect(
+                    textSelection.getOffset(), textSelection.getLength());
+            for (IJavaElement element : elements) {
+                if (element instanceof IMethod) {
+                    return element;
+                }
+            }
+        } catch (JavaModelException ignored) {
+        }
+        // Preserve navigation from declarations and selections that do not
+        // resolve to a method, such as whitespace within a declaration.
         try {
             return compilationUnit.getElementAt(textSelection.getOffset());
         } catch (JavaModelException ignored) {
