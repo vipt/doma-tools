@@ -15,22 +15,28 @@
  */
 package org.seasar.doma.extension.domax;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
 import org.eclipse.core.resources.IFile;
+import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IResourceChangeEvent;
 import org.eclipse.core.resources.IResourceChangeListener;
 import org.eclipse.core.resources.IResourceDelta;
 import org.eclipse.core.resources.IResourceDeltaVisitor;
+import org.eclipse.core.resources.IWorkspace;
 import org.eclipse.core.resources.IncrementalProjectBuilder;
+import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.resources.WorkspaceJob;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
-import org.eclipse.jdt.core.IBuffer;
 import org.eclipse.jdt.core.ICompilationUnit;
-import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.JavaModelException;
 import org.seasar.doma.extension.domax.factory.Factory;
@@ -38,89 +44,185 @@ import org.seasar.doma.extension.domax.model.DaoMethod;
 import org.seasar.doma.extension.domax.model.DaoMethodFactory;
 import org.seasar.doma.extension.domax.model.ResourceFile;
 
+/**
+ * Recompiles DAO interfaces when their SQL or script files change, so that the
+ * Doma annotation processor validates them again.
+ * <p>
+ * Changed files are collected and handled by a single, coalescing job: a
+ * branch switch that changes thousands of SQL files results in one job that
+ * touches each affected DAO once, instead of one job (and one worker thread)
+ * per SQL file.
+ */
 public class ResourceFileChangeListener implements IResourceChangeListener {
+
+    /** Job family of the job that touches the DAOs. */
+    public static final Object JOB_FAMILY = new Object();
+
+    /** Wait a little so that bursts of changes are handled together. */
+    private static final long DELAY_MILLIS = 500L;
+
+    private static final int RELEVANT_CHANGE_FLAGS = IResourceDelta.CONTENT
+            | IResourceDelta.REPLACED | IResourceDelta.ENCODING;
+
+    /** Guarded by itself. */
+    private final Set<IFile> pendingFiles = new LinkedHashSet<IFile>();
+
+    private final Job job = new TouchDaoJob();
 
     @Override
     public void resourceChanged(IResourceChangeEvent event) {
-        if (event.getBuildKind() != IncrementalProjectBuilder.FULL_BUILD
-                && event.getBuildKind() != IncrementalProjectBuilder.CLEAN_BUILD) {
-            IResourceDelta delta = event.getDelta();
-            if (delta != null) {
-                try {
-                    delta.accept(new SqlFileDeltaVisitor());
-                } catch (CoreException e) {
-                    Logger.error(e);
-                }
-            }
+        if (event.getType() != IResourceChangeEvent.POST_CHANGE) {
+            return;
         }
+        IResourceDelta delta = event.getDelta();
+        if (delta == null) {
+            return;
+        }
+        SqlFileDeltaVisitor visitor = new SqlFileDeltaVisitor();
+        try {
+            delta.accept(visitor);
+        } catch (CoreException e) {
+            Logger.error(e);
+        }
+        if (visitor.files.isEmpty()) {
+            return;
+        }
+        synchronized (pendingFiles) {
+            pendingFiles.addAll(visitor.files);
+        }
+        // A running job is rescheduled after it finishes, and a waiting or
+        // sleeping job is not duplicated, so pending files are never lost.
+        job.schedule(DELAY_MILLIS);
     }
 
-    private class SqlFileDeltaVisitor implements IResourceDeltaVisitor {
+    private static class SqlFileDeltaVisitor implements IResourceDeltaVisitor {
+
+        private final List<IFile> files = new ArrayList<IFile>();
 
         @Override
-        public boolean visit(IResourceDelta delta) throws CoreException {
+        public boolean visit(IResourceDelta delta) {
             IResource resource = delta.getResource();
+            if (resource.isDerived()) {
+                // build output such as target/classes
+                return false;
+            }
+            if (resource.getType() != IResource.FILE) {
+                return true;
+            }
+            if (!ResourceFile.isResourceFileExtension(resource
+                    .getFileExtension())) {
+                return false;
+            }
             switch (delta.getKind()) {
             case IResourceDelta.ADDED:
             case IResourceDelta.REMOVED:
+                files.add((IFile) resource);
+                break;
             case IResourceDelta.CHANGED:
-                DaoMethod daoMethod = createDaoMethod(resource);
-                if (daoMethod != null) {
-                    submitJob(resource, daoMethod);
+                // ignore marker-only and similar changes
+                if ((delta.getFlags() & RELEVANT_CHANGE_FLAGS) != 0) {
+                    files.add((IFile) resource);
                 }
                 break;
             }
-            return true;
+            return false;
         }
     }
 
-    private DaoMethod createDaoMethod(IResource resource) {
-        final IFile file = (IFile) resource.getAdapter(IFile.class);
-        if (file == null) {
-            return null;
+    private class TouchDaoJob extends WorkspaceJob {
+
+        TouchDaoJob() {
+            super("Rebuilding Doma DAOs for changed SQL files");
+            setPriority(Job.BUILD);
+            // Conflicting jobs wait in the queue instead of each blocking a
+            // worker thread on the workspace lock.
+            setRule(ResourcesPlugin.getWorkspace().getRoot());
         }
-        String extension = file.getFileExtension();
-        if (!ResourceFile.isResourceFileExtension(extension)) {
-            return null;
+
+        @Override
+        public boolean belongsTo(Object family) {
+            return family == JOB_FAMILY;
         }
-        DaoMethodFactory daoMethodFactory = Factory.getDaoMethodFactory();
-        return daoMethodFactory.createDaoMethod(file);
-    }
 
-    private void submitJob(final IResource resource, DaoMethod daoMethod) {
-        IJavaProject javaProject = daoMethod.getJavaProject();
-        try {
-            IType type = javaProject.findType(daoMethod.getClassName());
-            if (type == null) {
-                return;
-            }
-            final ICompilationUnit compilationUnit = type.getCompilationUnit();
-            if (compilationUnit == null) {
-                return;
+        @Override
+        public IStatus runInWorkspace(IProgressMonitor monitor)
+                throws CoreException {
+            List<IFile> files;
+            synchronized (pendingFiles) {
+                files = new ArrayList<IFile>(pendingFiles);
+                pendingFiles.clear();
             }
 
-            WorkspaceJob job = new WorkspaceJob("building "
-                    + daoMethod.getClassName()) {
+            Set<IFile> daoFiles = findDaoFiles(files);
+            Set<IProject> projects = new LinkedHashSet<IProject>();
 
-                @Override
-                public IStatus runInWorkspace(IProgressMonitor monitor)
-                        throws CoreException {
-                    compilationUnit.becomeWorkingCopy(monitor);
-                    IBuffer buffer = compilationUnit.getBuffer();
-                    buffer.append("");
-                    buffer.save(monitor, true);
-                    buffer.close();
-                    compilationUnit.commitWorkingCopy(true, monitor);
-                    resource.getProject().build(
-                            IncrementalProjectBuilder.INCREMENTAL_BUILD,
-                            monitor);
-                    return Status.OK_STATUS;
+            monitor.beginTask(getName(), daoFiles.size() + 1);
+            try {
+                for (IFile daoFile : daoFiles) {
+                    if (monitor.isCanceled()) {
+                        return Status.CANCEL_STATUS;
+                    }
+                    monitor.subTask(daoFile.getName());
+                    // A content change makes the Java builder recompile the
+                    // DAO, which runs the annotation processor again.
+                    daoFile.touch(null);
+                    projects.add(daoFile.getProject());
+                    monitor.worked(1);
                 }
-            };
-            job.setPriority(Job.BUILD);
-            job.schedule();
-        } catch (JavaModelException e) {
-            Logger.error(e);
+
+                IWorkspace workspace = ResourcesPlugin.getWorkspace();
+                if (!workspace.isAutoBuilding()) {
+                    // With auto build on, Eclipse builds once after this job.
+                    for (IProject project : projects) {
+                        if (monitor.isCanceled()) {
+                            return Status.CANCEL_STATUS;
+                        }
+                        project.build(
+                                IncrementalProjectBuilder.INCREMENTAL_BUILD,
+                                null);
+                    }
+                }
+                monitor.worked(1);
+                return Status.OK_STATUS;
+            } finally {
+                monitor.done();
+            }
+        }
+
+        private Set<IFile> findDaoFiles(List<IFile> files) {
+            DaoMethodFactory daoMethodFactory = Factory.getDaoMethodFactory();
+            Set<String> seenClasses = new LinkedHashSet<String>();
+            Set<IFile> daoFiles = new LinkedHashSet<IFile>();
+            for (IFile file : files) {
+                DaoMethod daoMethod = daoMethodFactory.createDaoMethod(file);
+                if (daoMethod == null) {
+                    continue;
+                }
+                String key = daoMethod.getJavaProject().getElementName() + "/"
+                        + daoMethod.getClassName();
+                if (!seenClasses.add(key)) {
+                    continue;
+                }
+                try {
+                    IType type = daoMethod.getJavaProject().findType(
+                            daoMethod.getClassName());
+                    if (type == null) {
+                        continue;
+                    }
+                    ICompilationUnit compilationUnit = type
+                            .getCompilationUnit();
+                    if (compilationUnit == null) {
+                        continue;
+                    }
+                    IResource resource = compilationUnit.getResource();
+                    if (resource instanceof IFile && resource.exists()) {
+                        daoFiles.add((IFile) resource);
+                    }
+                } catch (JavaModelException e) {
+                    Logger.error(e);
+                }
+            }
+            return daoFiles;
         }
     }
 
