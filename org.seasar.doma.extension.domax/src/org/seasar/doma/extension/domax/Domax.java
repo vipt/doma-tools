@@ -15,6 +15,7 @@
  */
 package org.seasar.doma.extension.domax;
 
+import org.eclipse.core.resources.IResourceChangeEvent;
 import org.eclipse.core.resources.IWorkspace;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.ui.IStartup;
@@ -39,7 +40,8 @@ public class Domax extends AbstractUIPlugin implements IStartup {
     @Override
     public void earlyStartup() {
         IWorkspace workspace = ResourcesPlugin.getWorkspace();
-        workspace.addResourceChangeListener(new ResourceFileChangeListener());
+        workspace.addResourceChangeListener(new ResourceFileChangeListener(),
+                IResourceChangeEvent.POST_CHANGE);
     }
 
     @Override

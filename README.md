@@ -4,12 +4,57 @@ Doma Tools
 Doma Tools is an Eclipse plugin for Doma. 
 
 This fork adds navigation from DAO method calls to SQL using the existing
-`Doma > Jump to SQL File` command.
+`Doma > Jump to SQL File` command, and fixes an out-of-memory crash when many
+SQL files change at once (see [Changes in this fork](#changes-in-this-fork)).
 
 Doma Tools does the following:
 
 1. cross navigation between Java and SQL files.
 2. triggering the annotation processing when saving SQL files.
+
+Changes in this fork
+--------
+
+### DAO-call navigation
+
+`Doma > Jump to SQL File` also works on DAO method calls and method references
+in other Java classes. See [How to use](#how-to-use).
+
+### Fix: out-of-memory crash when many SQL files change at once
+
+**Symptom.** After a Git branch switch, pull or refresh that changed hundreds
+of SQL files, Eclipse showed *"An out of memory error has occurred"* and became
+unstable. The workspace `.metadata/.log` contained
+`java.lang.OutOfMemoryError: unable to create native thread`, and a thread dump
+showed thousands of `Worker-N: building <DaoClass>` threads blocked on the
+workspace lock. This is a thread exhaustion problem (macOS allows 4,096 threads
+per process); increasing `-Xmx` does not help.
+
+**Cause.** The original SQL-change trigger scheduled one job per changed SQL
+file. The jobs had no scheduling rule, so Eclipse started a worker thread for
+each of them, and each one re-saved the DAO through the editor buffer and
+started its own project build.
+
+**Fix.** `ResourceFileChangeListener` now:
+
+- collects changed SQL and script files and handles them in a single,
+  coalescing job (scheduled after 500 ms), so a burst of changes produces one
+  job instead of one job per file;
+- touches each affected DAO source file once, however many of its SQL files
+  changed; the Java builder then recompiles the DAO and the Doma annotation
+  processor validates it again;
+- runs that job with the workspace-root scheduling rule, so it waits in the
+  job queue rather than holding a thread blocked on the workspace lock;
+- leaves the build to Eclipse when auto build is on, and builds each affected
+  project once when auto build is off;
+- ignores marker-only changes and derived resources such as `target/classes`.
+
+The listener is registered only for `POST_CHANGE` events.
+
+**Behavior change.** The DAO is no longer saved through its editor buffer, so
+unsaved edits in an open DAO editor are no longer saved implicitly. If the DAO
+editor has unsaved changes when its SQL changes, Eclipse may report that the
+file changed on the file system.
 
 Install this fork
 --------
@@ -113,7 +158,10 @@ Validation
 Tests cover calls, caret and range selections, declarations and their fallback,
 method references, unsaved working copies, referenced projects, scripts,
 missing SQL, and unrelated methods. They exercise the actual handler and
-existing SQL factory with real Java projects. Interactive acceptance checks:
+existing SQL factory with real Java projects. `ResourceFileChangeListenerTest`
+checks that 60 separate SQL changes across 3 DAOs produce at most one job and
+touch every DAO, that only the DAO of a changed SQL file is touched, and that
+marker-only changes schedule no job. Interactive acceptance checks:
 
 1. On a service's DAO call, select `Doma > Jump to SQL File` and confirm the
    expected SQL opens. Repeat on the DAO method declaration and with an
@@ -123,6 +171,9 @@ existing SQL factory with real Java projects. Interactive acceptance checks:
    canceled. On a non-DAO service method, confirm no SQL is opened.
 4. Save an SQL file and check the existing annotation-processing trigger;
    check `Doma > Jump to Dao` still opens the DAO.
+5. Switch to a Git branch that changes many SQL files and confirm the Progress
+   view shows a single "Rebuilding Doma DAOs for changed SQL files" job and that
+   Eclipse stays responsive.
 
 License
 -------
