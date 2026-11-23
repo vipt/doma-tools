@@ -39,18 +39,24 @@ files by hand. The Eclipse refactorings now take the SQL files along:
 
 Details:
 
-- Only interfaces annotated with `@Dao` are handled. Files are matched by
-  exact method name or `<method>-` prefix, so `selectByIdAndName.sql` is not
-  touched when `selectById` is renamed.
+- Only interfaces annotated with Doma's `@Dao` (`org.seasar.doma.Dao`,
+  resolved through the imports) are handled; a `@Dao` annotation from another
+  library is ignored. Files are matched by exact method name or `<method>-`
+  prefix, so `selectByIdAndName.sql` is not touched when `selectById` is
+  renamed.
 - SQL files stay in the source folder they are in (for example
   `src/main/resources` or `src/main/java`). Folders under `META-INF` that a
   move leaves empty are removed.
 - The changes appear in the refactoring preview and are undone together with
-  the refactoring (`Edit > Undo`).
-- If a destination file or folder already exists, the refactoring reports an
-  error instead of overwriting it.
-- Moving a DAO to another project is not handled; the refactoring shows a
-  warning and the SQL files must be moved manually.
+  the refactoring (`Edit > Undo`). Undo removes only the folders that the
+  refactoring created; folders that existed before are kept.
+- If a destination file or folder already exists, or a file is where a
+  destination folder must be created, the refactoring stops with an error
+  before changing anything, so the Java code and the SQL files never get out
+  of step.
+- Moving a DAO to another project is not handled, even to a package of the
+  same name; the refactoring shows a warning and the SQL files must be moved
+  manually.
 
 ### Fix: out-of-memory crash when many SQL files change at once
 
@@ -194,10 +200,15 @@ existing SQL factory with real Java projects. `ResourceFileChangeListenerTest`
 checks that 60 separate SQL changes across 3 DAOs produce at most one job and
 touch every DAO, that only the DAO of a changed SQL file is touched, and that
 marker-only changes schedule no job. `DaoRefactoringParticipantTest` runs the
-real JDT refactorings and checks DAO method rename (with suffixed files and a
-similarly named file left alone), DAO rename, DAO move, package rename and its
-undo, rejection when the destination SQL file exists, and that non-DAO
-interfaces are ignored. Interactive acceptance checks:
+real JDT refactorings with reference updates and checks DAO method rename
+(with suffixed files and a similarly named file left alone), DAO rename, DAO
+move, package rename and its undo, that undo keeps folders that existed
+before, rejection when the destination SQL file exists or a file blocks the
+destination folder, the warning for a move to another project, and that
+non-DAO interfaces and another library's `@Dao` are ignored. The JDT UI
+plug-in cannot start without a display, so the test uses JDT core working
+copy buffers and sets the import-order defaults that import rewriting reads.
+Interactive acceptance checks:
 
 1. On a service's DAO call, select `Doma > Jump to SQL File` and confirm the
    expected SQL opens. Repeat on the DAO method declaration and with an

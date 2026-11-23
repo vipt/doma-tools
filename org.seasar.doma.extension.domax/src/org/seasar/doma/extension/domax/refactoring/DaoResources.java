@@ -20,10 +20,12 @@ import org.eclipse.core.resources.IContainer;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IFolder;
 import org.eclipse.core.resources.IResource;
+import org.eclipse.core.resources.IWorkspaceRoot;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.Path;
+import org.eclipse.jdt.core.IAnnotation;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IPackageFragment;
@@ -36,7 +38,7 @@ import org.seasar.doma.extension.domax.ClassConstants;
 import org.seasar.doma.extension.domax.Constants;
 import org.seasar.doma.extension.domax.Logger;
 import org.seasar.doma.extension.domax.model.ResourceFile;
-import org.seasar.doma.extension.domax.util.AnnotationUtil;
+import org.seasar.doma.extension.domax.util.ClassUtil;
 import org.seasar.doma.extension.domax.util.JavaProjectUtil;
 
 /**
@@ -53,11 +55,40 @@ final class DaoResources {
             return false;
         }
         try {
-            return type.isInterface()
-                    && AnnotationUtil.isExistent(type, ClassConstants.Dao);
+            return type.isInterface() && isAnnotatedWithDomaDao(type);
         } catch (JavaModelException e) {
             return false;
         }
+    }
+
+    /**
+     * Whether the type is annotated with {@code org.seasar.doma.Dao}, resolved
+     * through the imports so that another library's {@code @Dao} is ignored.
+     */
+    private static boolean isAnnotatedWithDomaDao(IType type)
+            throws JavaModelException {
+        for (IAnnotation annotation : type.getAnnotations()) {
+            String name = annotation.getElementName();
+            if (ClassConstants.Dao.equals(name)) {
+                return true;
+            }
+            if (!name.equals(ClassUtil.getSimpleName(ClassConstants.Dao))
+                    && !name.endsWith("." + ClassUtil.getSimpleName(ClassConstants.Dao))) {
+                continue;
+            }
+            String[][] resolved = type.resolveType(name);
+            if (resolved == null) {
+                continue;
+            }
+            for (String[] candidate : resolved) {
+                String qualifiedName = candidate[0].length() == 0 ? candidate[1]
+                        : candidate[0] + "." + candidate[1];
+                if (ClassConstants.Dao.equals(qualifiedName)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     static List<IType> daoTypes(IPackageFragment fragment) {
@@ -145,10 +176,30 @@ final class DaoResources {
                 daoPath(newPackageName, daoFolder.getName()));
     }
 
+    /**
+     * Reports a fatal error when the destination exists, or when a file is in
+     * the way of a folder that must be created for it. Fatal errors stop the
+     * refactoring before any change, so Java and SQL never get out of step.
+     */
     static void checkDestination(RefactoringStatus status, IPath destination) {
-        if (ResourcesPlugin.getWorkspace().getRoot().findMember(destination) != null) {
-            status.addError("Doma: '" + destination
+        IWorkspaceRoot root = ResourcesPlugin.getWorkspace().getRoot();
+        if (root.findMember(destination) != null) {
+            status.addFatalError("Doma: '" + destination
                     + "' already exists, so the SQL files cannot be moved there.");
+            return;
+        }
+        for (IPath parent = destination.removeLastSegments(1); parent
+                .segmentCount() > 0; parent = parent.removeLastSegments(1)) {
+            IResource member = root.findMember(parent);
+            if (member instanceof IContainer) {
+                return;
+            }
+            if (member != null) {
+                status.addFatalError("Doma: '" + parent
+                        + "' is a file, so the SQL folder '" + destination
+                        + "' cannot be created.");
+                return;
+            }
         }
     }
 

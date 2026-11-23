@@ -43,8 +43,13 @@ public class DaoTypeMoveParticipant extends MoveParticipant {
         }
         type = (IType) element;
         IPackageFragment destination = destinationPackage();
-        if (destination == null
-                || destination.getElementName().equals(oldPackageName())) {
+        if (destination == null) {
+            return false;
+        }
+        // Compare projects first: a package of the same name in another
+        // project still needs the warning about moving SQL files manually.
+        if (isSameProject()
+                && destination.getElementName().equals(oldPackageName())) {
             return false;
         }
         folders = DaoResources.daoFolders(type);

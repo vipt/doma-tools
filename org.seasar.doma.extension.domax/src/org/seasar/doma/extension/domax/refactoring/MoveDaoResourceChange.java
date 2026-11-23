@@ -13,6 +13,10 @@
  */
 package org.seasar.doma.extension.domax.refactoring;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 import org.eclipse.core.resources.IContainer;
 import org.eclipse.core.resources.IFolder;
 import org.eclipse.core.resources.IResource;
@@ -27,9 +31,13 @@ import org.eclipse.ltk.core.refactoring.RefactoringStatus;
 import org.seasar.doma.extension.domax.Constants;
 
 /**
- * Moves or renames a DAO folder or SQL file. Missing destination folders are
- * created, and when {@code pruneEmptyParents} is set, source folders left
- * empty below {@code META-INF} are deleted. The undo change moves it back.
+ * Moves or renames a DAO folder or SQL file and creates missing destination
+ * folders.
+ * <p>
+ * The refactoring itself may remove the source folders that the move leaves
+ * empty below {@code META-INF} ({@code pruneEmptySourceFolders}). An undo (or
+ * redo) change removes only the folders that the change it reverts created,
+ * so folders that existed before the refactoring are kept.
  */
 class MoveDaoResourceChange extends Change {
 
@@ -37,13 +45,23 @@ class MoveDaoResourceChange extends Change {
 
     private final IPath destination;
 
-    private final boolean pruneEmptyParents;
+    private final boolean pruneEmptySourceFolders;
+
+    /** Folders created by the reverted change, removed again when empty. */
+    private final List<IPath> createdFoldersToRemove;
 
     MoveDaoResourceChange(IPath source, IPath destination,
-            boolean pruneEmptyParents) {
+            boolean pruneEmptySourceFolders) {
+        this(source, destination, pruneEmptySourceFolders, Collections
+                .<IPath> emptyList());
+    }
+
+    private MoveDaoResourceChange(IPath source, IPath destination,
+            boolean pruneEmptySourceFolders, List<IPath> createdFoldersToRemove) {
         this.source = source;
         this.destination = destination;
-        this.pruneEmptyParents = pruneEmptyParents;
+        this.pruneEmptySourceFolders = pruneEmptySourceFolders;
+        this.createdFoldersToRemove = createdFoldersToRemove;
     }
 
     @Override
@@ -68,22 +86,23 @@ class MoveDaoResourceChange extends Change {
         if (root().findMember(source) == null) {
             status.addFatalError("'" + source + "' does not exist.");
         }
-        if (root().findMember(destination) != null) {
-            status.addFatalError("'" + destination + "' already exists.");
-        }
+        DaoResources.checkDestination(status, destination);
         return status;
     }
 
     @Override
     public Change perform(IProgressMonitor pm) throws CoreException {
         IResource resource = root().findMember(source);
-        createFolders(destination.removeLastSegments(1), pm);
+        List<IPath> created = new ArrayList<IPath>();
+        createFolders(destination.removeLastSegments(1), created, pm);
         resource.move(destination, IResource.KEEP_HISTORY, pm);
-        if (pruneEmptyParents) {
+        if (pruneEmptySourceFolders) {
             pruneEmptyFolders(source.removeLastSegments(1), pm);
         }
-        return new MoveDaoResourceChange(destination, source,
-                pruneEmptyParents);
+        for (int i = createdFoldersToRemove.size() - 1; i >= 0; i--) {
+            deleteIfEmpty(createdFoldersToRemove.get(i), pm);
+        }
+        return new MoveDaoResourceChange(destination, source, false, created);
     }
 
     @Override
@@ -91,13 +110,15 @@ class MoveDaoResourceChange extends Change {
         return root().findMember(source);
     }
 
-    private static void createFolders(IPath path, IProgressMonitor pm)
-            throws CoreException {
+    /** Creates the missing folders of a path, recording them top-down. */
+    private static void createFolders(IPath path, List<IPath> created,
+            IProgressMonitor pm) throws CoreException {
         if (path.segmentCount() < 2 || root().findMember(path) != null) {
             return;
         }
-        createFolders(path.removeLastSegments(1), pm);
+        createFolders(path.removeLastSegments(1), created, pm);
         root().getFolder(path).create(false, true, pm);
+        created.add(path);
     }
 
     private static void pruneEmptyFolders(IPath path, IProgressMonitor pm)
@@ -109,6 +130,15 @@ class MoveDaoResourceChange extends Change {
             IContainer parent = resource.getParent();
             resource.delete(IResource.KEEP_HISTORY, pm);
             resource = parent;
+        }
+    }
+
+    private static void deleteIfEmpty(IPath path, IProgressMonitor pm)
+            throws CoreException {
+        IResource resource = root().findMember(path);
+        if (resource instanceof IFolder
+                && ((IFolder) resource).members().length == 0) {
+            resource.delete(IResource.KEEP_HISTORY, pm);
         }
     }
 
