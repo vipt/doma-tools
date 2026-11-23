@@ -300,4 +300,50 @@
             class="org.seasar.doma.extension.domax.Domax">
       </startup>
    </extension>
+   <extension
+         point="org.eclipse.ltk.core.refactoring.renameParticipants">
+      <renameParticipant
+            class="org.seasar.doma.extension.domax.refactoring.DaoMethodRenameParticipant"
+            id="org.seasar.doma.extension.domax.renameDaoMethodParticipant"
+            name="Rename Doma SQL files">
+         <enablement>
+            <with variable="element">
+               <instanceof value="org.eclipse.jdt.core.IMethod"/>
+            </with>
+         </enablement>
+      </renameParticipant>
+      <renameParticipant
+            class="org.seasar.doma.extension.domax.refactoring.DaoTypeRenameParticipant"
+            id="org.seasar.doma.extension.domax.renameDaoTypeParticipant"
+            name="Rename Doma SQL folder">
+         <enablement>
+            <with variable="element">
+               <instanceof value="org.eclipse.jdt.core.IType"/>
+            </with>
+         </enablement>
+      </renameParticipant>
+      <renameParticipant
+            class="org.seasar.doma.extension.domax.refactoring.DaoPackageRenameParticipant"
+            id="org.seasar.doma.extension.domax.renameDaoPackageParticipant"
+            name="Move Doma SQL folders">
+         <enablement>
+            <with variable="element">
+               <instanceof value="org.eclipse.jdt.core.IPackageFragment"/>
+            </with>
+         </enablement>
+      </renameParticipant>
+   </extension>
+   <extension
+         point="org.eclipse.ltk.core.refactoring.moveParticipants">
+      <moveParticipant
+            class="org.seasar.doma.extension.domax.refactoring.DaoTypeMoveParticipant"
+            id="org.seasar.doma.extension.domax.moveDaoTypeParticipant"
+            name="Move Doma SQL folder">
+         <enablement>
+            <with variable="element">
+               <instanceof value="org.eclipse.jdt.core.IType"/>
+            </with>
+         </enablement>
+      </moveParticipant>
+   </extension>
 </plugin>
