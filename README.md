@@ -4,13 +4,15 @@ Doma Tools
 Doma Tools is an Eclipse plugin for Doma. 
 
 This fork adds navigation from DAO method calls to SQL using the existing
-`Doma > Jump to SQL File` command, and fixes an out-of-memory crash when many
-SQL files change at once (see [Changes in this fork](#changes-in-this-fork)).
+`Doma > Jump to SQL File` command, keeps SQL files in step with DAO rename and
+move refactorings, and fixes an out-of-memory crash when many SQL files change
+at once (see [Changes in this fork](#changes-in-this-fork)).
 
 Doma Tools does the following:
 
 1. cross navigation between Java and SQL files.
 2. triggering the annotation processing when saving SQL files.
+3. renaming and moving SQL files together with DAO refactorings.
 
 Changes in this fork
 --------
@@ -19,6 +21,42 @@ Changes in this fork
 
 `Doma > Jump to SQL File` also works on DAO method calls and method references
 in other Java classes. See [How to use](#how-to-use).
+
+### SQL files follow DAO rename and move refactorings
+
+Doma looks up SQL files by path:
+`META-INF/<package path>/<DAO name>/<method name>.sql`. Previously, renaming a
+DAO method or moving a DAO left its SQL files behind, and Doma then reported
+the SQL as missing (and the old file as unmapped, DOMA4220) until you moved the
+files by hand. The Eclipse refactorings now take the SQL files along:
+
+| Refactoring (`Refactor > Rename...` / `Refactor > Move...`) | What happens to the SQL files |
+|---|---|
+| Rename a DAO method | `selectById.sql` → `findById.sql`, including suffixed files such as `selectById-oracle.sql` and `.script` files |
+| Rename a DAO interface | `META-INF/.../EmployeeDao/` → `META-INF/.../StaffDao/` |
+| Move a DAO to another package | `META-INF/example/dao/EmployeeDao/` → `META-INF/example/repository/EmployeeDao/` |
+| Rename a package containing DAOs | each DAO folder moves to `META-INF/<new package path>/` |
+
+Details:
+
+- Only interfaces annotated with Doma's `@Dao` (`org.seasar.doma.Dao`,
+  resolved through the imports) are handled; a `@Dao` annotation from another
+  library is ignored. Files are matched by exact method name or `<method>-`
+  prefix, so `selectByIdAndName.sql` is not touched when `selectById` is
+  renamed.
+- SQL files stay in the source folder they are in (for example
+  `src/main/resources` or `src/main/java`). Folders under `META-INF` that a
+  move leaves empty are removed.
+- The changes appear in the refactoring preview and are undone together with
+  the refactoring (`Edit > Undo`). Undo removes only the folders that the
+  refactoring created; folders that existed before are kept.
+- If a destination file or folder already exists, or a file is where a
+  destination folder must be created, the refactoring stops with an error
+  before changing anything, so the Java code and the SQL files never get out
+  of step.
+- Moving a DAO to another project is not handled, even to a package of the
+  same name; the refactoring shows a warning and the SQL files must be moved
+  manually.
 
 ### Fix: out-of-memory crash when many SQL files change at once
 
@@ -161,7 +199,16 @@ missing SQL, and unrelated methods. They exercise the actual handler and
 existing SQL factory with real Java projects. `ResourceFileChangeListenerTest`
 checks that 60 separate SQL changes across 3 DAOs produce at most one job and
 touch every DAO, that only the DAO of a changed SQL file is touched, and that
-marker-only changes schedule no job. Interactive acceptance checks:
+marker-only changes schedule no job. `DaoRefactoringParticipantTest` runs the
+real JDT refactorings with reference updates and checks DAO method rename
+(with suffixed files and a similarly named file left alone), DAO rename, DAO
+move, package rename and its undo, that undo keeps folders that existed
+before, rejection when the destination SQL file exists or a file blocks the
+destination folder, the warning for a move to another project, and that
+non-DAO interfaces and another library's `@Dao` are ignored. The JDT UI
+plug-in cannot start without a display, so the test uses JDT core working
+copy buffers and sets the import-order defaults that import rewriting reads.
+Interactive acceptance checks:
 
 1. On a service's DAO call, select `Doma > Jump to SQL File` and confirm the
    expected SQL opens. Repeat on the DAO method declaration and with an
@@ -174,6 +221,9 @@ marker-only changes schedule no job. Interactive acceptance checks:
 5. Switch to a Git branch that changes many SQL files and confirm the Progress
    view shows a single "Rebuilding Doma DAOs for changed SQL files" job and that
    Eclipse stays responsive.
+6. Rename a DAO method with `Refactor > Rename`, check the preview lists the SQL
+   file rename, then confirm no DOMA errors or DOMA4220 warnings appear. Undo
+   it, and repeat for renaming and moving a DAO and renaming its package.
 
 License
 -------

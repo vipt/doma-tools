@@ -8,7 +8,7 @@
     <groupId>org.eclipse.tycho</groupId><artifactId>tycho-surefire-plugin</artifactId><version>${tycho.version}</version>
     <configuration>
       <useUIHarness>false</useUIHarness><useUIThread>false</useUIThread>
-      <includes><include>**/JavaEditorSqlNavigationTest.class</include><include>**/ResourceFileChangeListenerTest.class</include></includes>
+      <includes><include>**/JavaEditorSqlNavigationTest.class</include><include>**/ResourceFileChangeListenerTest.class</include><include>**/DaoRefactoringParticipantTest.class</include></includes>
     </configuration>
   </plugin></plugins></build>
 </project>
